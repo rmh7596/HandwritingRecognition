@@ -6,14 +6,14 @@ import random
 import torch
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
 import torch.nn as nn
 torch.manual_seed(0)
 train_directory = "Data/"
 
 class Dataset(Dataset):
-    def __init__(self, transform=None, train=True):
-        self.all_files = []
-        self.labels = []
+    def __init__(self, transform=None, training=True):
+        self.dataset = []
         self.transform = transform
 
         for letter in os.listdir(train_directory):
@@ -22,30 +22,27 @@ class Dataset(Dataset):
             letter_files.sort()
             for sample in letter_files:
                 label = ord(letter)%97 # Modularlly divides by 97 to label chars a-z with ints 0-25
-                self.labels.append(label)
-                self.all_files.append(sample)
-        
-        random.seed(1)
-        random.shuffle(self.all_files)
-        random.shuffle(self.labels)
-        # Shuffle the order of the images
+                self.dataset.append([sample, label])
+
         # Using a 80/20 split
-        if train:
-            self.all_files = self.all_files[0:8335]
-            self.labels = self.labels[0:8335]
+        train, test = train_test_split(self.dataset, test_size=0.2, random_state=25)
+        
+        if training:
+            self.all_files = train
             self.len = len(self.all_files)
         else: 
-            self.all_files = self.all_files[8335::]
-            self.labels = self.labels[8335::]
+            self.all_files = test
             self.len = len(self.all_files)
 
+    def getDatasetlen(self):
+        return len(self.dataset)
         
     def __len__(self):
         return self.len
 
     def __getitem__(self, id):
-        image = Image.open(self.all_files[id])
-        label = self.labels[id]
+        image = Image.open(self.dataset[id][0])
+        label = self.dataset[id][1]
 
         if self.transform: # Apply a transform if needed
             image = self.transform(image)
@@ -83,27 +80,27 @@ class CNN(nn.Module):
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-model = CNN(out_1=160, out_2=80, out_3=480)
+model = CNN(out_1=160, out_2=320, out_3=480)
 model.to(device)
 
-train_dataset = Dataset(transform=transforms.ToTensor(), train=True)
-mean, mean_squared = 0.0, 0.0
+train_dataset = Dataset(transform=transforms.ToTensor(), training=True)
+mean, std = 0.0, 0.0
 
 for image, _ in train_dataset:
-    mean += image[0].mean()
-    mean_squared += torch.mean(image**2)
+    mean += image.mean()
+    std += image.std()
 
-mean = mean/len(train_dataset)
-#std = sqrt(E[X^2] - (E[X])^2)
-std = (mean_squared / len(train_dataset) - mean ** 2) ** 0.5
+totalDatasetLength = train_dataset.getDatasetlen()
+mean = mean/totalDatasetLength
+std = std/totalDatasetLength
 
 composed = transforms.Compose([transforms.ToTensor(), transforms.Resize([160,160]), transforms.Normalize(mean, std)])
-train_dataset = Dataset(transform=composed, train=True)
-validation_dataset = Dataset(transform=composed, train=False)
+train_dataset = Dataset(transform=composed, training=True)
+validation_dataset = Dataset(transform=composed, training=False)
 
-batch_size = 52
+batch_size = 32
 momentum = 0.9
-lr=0.000001
+lr=0.00001
 
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum)
@@ -114,14 +111,13 @@ n_test = len(validation_dataset)
 
 loss_list = []
 accuracy_list = []
-test_image = []
+test_images = []
 predicted_label = []
 actual_label = []
-sample_number = []
 
 def train_model(n_epochs):
-    correct = 0
     for epoch in range(n_epochs):
+        print(f"Epoch {epoch} started")
         for x, y in trainloader:
             x, y=x.to(device), y.to(device)
             model.train() 
@@ -140,31 +136,32 @@ def train_model(n_epochs):
             _, yhat = torch.max(z.data, 1)
             correct += (yhat == y_test).sum().item()
 
+            # Uncomment to collect misclassified samples
+            '''
             for i in range(len(x_test)):
                 if not (yhat[i]==y_test[i]):
-                    sample_number.append(i)
-                    test_image.append(x_test[i])
-                    predicted_label.append(y_test[i])
-                    actual_label.append(yhat[i])
-
+                    test_images.append(x_test[i])
+                    predicted_label.append(yhat[i])
+                    actual_label.append(y_test[i])
+            '''
         loss_list.append(loss.cpu().data)
         accuracy = correct / n_test
         accuracy_list.append(accuracy)
 
-    return correct
+train_model(10)
+#print("Total validation length: ", len(validation_dataset))
+print("Max Accuracy %:", max(accuracy_list) * 100)
+#print("Length of misclassified samples", len(test_images))
 
-print("Num correct: ", train_model(1))
-torch.cuda.empty_cache()
-print("Accuracy %", max(accuracy_list) * 100)
-
-def show_misclassified_sample():
-    fig, ax1 = plt.subplots()
-    pred = predicted_label[0].cpu().numpy()
-    actual = predicted_label[0].cpu().numpy()
-    ax1.set_title(f"Predicted value: {pred}, Actual value: {actual}")
-    img = test_image[0].cpu().numpy()
-    plt.imshow(np.squeeze(img), cmap="gray")
-    plt.show()
+def show_misclassified_samples():
+    for i in range(5):
+        fig, ax1 = plt.subplots()
+        pred = chr(predicted_label[i].cpu().numpy() +  97)
+        actual = chr(actual_label[i].cpu().numpy() + 97)
+        ax1.set_title(f"Predicted value: {pred}, Actual value: {actual}")
+        img = test_images[i].cpu().numpy()
+        plt.imshow(np.squeeze(img), cmap="gray")
+        plt.show()
 
 def show_stats():
     fig, ax1 = plt.subplots()
@@ -182,4 +179,15 @@ def show_stats():
     fig.tight_layout()
     plt.show()
 
-show_misclassified_sample()
+def show_data():
+    for i in range(500, 505):
+        fig, ax1 = plt.subplots()
+        label = chr(train_dataset[i][1] + 97)
+        ax1.set_title(f"Label: {label}")
+        img = train_dataset[i][0].numpy()
+        plt.imshow(np.squeeze(img), cmap="gray")
+        plt.show()
+
+show_stats()
+#show_data()
+#show_misclassified_samples()

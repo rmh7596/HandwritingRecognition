@@ -1,2 +1,2 @@
 -Plot misclassified samples just to see
--Use data augmentation to create more data
+-Need to ensure that the data and labels are correct!
