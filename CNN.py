@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import os
 from PIL import Image
 import numpy as np
-import random
 import torch
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader
@@ -57,9 +56,9 @@ class CNN(nn.Module):
         self.maxpool1=nn.MaxPool2d(kernel_size=2) # Max pooling layer, output is 80
         self.cnn2 = nn.Conv2d(in_channels=out_1, out_channels=out_2, kernel_size=5, padding=2) # Output is 80
         self.maxpool2 = nn.MaxPool2d(kernel_size=2) # Output is 40
-        #self.cnn3 = nn.Conv2d(in_channels=out_2, out_channels=out_3, kernel_size=5, padding=2) # Output is 20
-        #self.maxpool3 = nn.MaxPool2d(kernel_size=2) # Output is 10
-        self.fc1 = nn.Linear(40*40*out_2, 26) # Fully connected neural network
+        self.cnn3 = nn.Conv2d(in_channels=out_2, out_channels=out_3, kernel_size=5, padding=2) # Output is 40
+        self.maxpool3 = nn.MaxPool2d(kernel_size=2) # Output is 20
+        self.fc1 = nn.Linear(20*20*out_3, 26) # Fully connected neural network
 
     def forward(self,x):
         x = self.cnn1(x)        # Convolution
@@ -70,9 +69,9 @@ class CNN(nn.Module):
         x = torch.relu(x)       # Activation
         x = self.maxpool2(x)    # Pooling
 
-        #x = self.cnn3(x)        # Convolution
-        #x = torch.relu(x)       # Activation
-        #x = self.maxpool3(x)    # Pooling
+        x = self.cnn3(x)        # Convolution
+        x = torch.relu(x)       # Activation
+        x = self.maxpool3(x)    # Pooling
 
         x = x.view(x.size(0), -1) # 1-D input
         x = self.fc1(x)
@@ -98,9 +97,10 @@ composed = transforms.Compose([transforms.ToTensor(), transforms.Resize([160,160
 train_dataset = Dataset(transform=composed, training=True)
 validation_dataset = Dataset(transform=composed, training=False)
 
-batch_size = 32
+batch_size = 26
 momentum = 0.9
 lr=0.00001
+num_epochs = 50
 
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum)
@@ -137,21 +137,25 @@ def train_model(n_epochs):
             correct += (yhat == y_test).sum().item()
 
             # Uncomment to collect misclassified samples
-            '''
-            for i in range(len(x_test)):
-                if not (yhat[i]==y_test[i]):
-                    test_images.append(x_test[i])
-                    predicted_label.append(yhat[i])
-                    actual_label.append(y_test[i])
-            '''
+            if epoch == n_epochs-1:
+                for i in range(len(x_test)):
+                    if not (yhat[i]==y_test[i]):
+                        test_images.append(x_test[i].cpu())
+                        predicted_label.append(yhat[i].cpu())
+                        actual_label.append(y_test[i].cpu())
+
         loss_list.append(loss.cpu().data)
         accuracy = correct / n_test
         accuracy_list.append(accuracy)
 
-train_model(10)
-#print("Total validation length: ", len(validation_dataset))
+train_model(num_epochs)
+
+PATH = "Model"
+NAME = f"Epochs{num_epochs}.pth"
+torch.save(model.state_dict(), os.path.join(PATH, NAME))
+
 print("Max Accuracy %:", max(accuracy_list) * 100)
-#print("Length of misclassified samples", len(test_images))
+print("Length of misclassified samples", len(test_images))
 
 def show_misclassified_samples():
     for i in range(5):
@@ -190,4 +194,4 @@ def show_data():
 
 show_stats()
 #show_data()
-#show_misclassified_samples()
+show_misclassified_samples()
