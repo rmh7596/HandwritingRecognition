@@ -137,12 +137,12 @@ def train_model(n_epochs):
             correct += (yhat == y_test).sum().item()
 
             # Uncomment to collect misclassified samples
-            if epoch == n_epochs-1:
-                for i in range(len(x_test)):
-                    if not (yhat[i]==y_test[i]):
-                        test_images.append(x_test[i].cpu())
-                        predicted_label.append(yhat[i].cpu())
-                        actual_label.append(y_test[i].cpu())
+            # if epoch == n_epochs-1:
+            #     for i in range(len(x_test)):
+            #         if not (yhat[i]==y_test[i]):
+            #             test_images.append(x_test[i].cpu())
+            #             predicted_label.append(yhat[i].cpu())
+            #             actual_label.append(y_test[i].cpu())
 
         loss_list.append(loss.cpu().data)
         accuracy = correct / n_test
@@ -152,7 +152,7 @@ train_model(num_epochs)
 
 PATH = "Model"
 NAME = f"Epochs{num_epochs}.pth"
-torch.save(model.state_dict(), os.path.join(PATH, NAME))
+#torch.save(model.state_dict(), os.path.join(PATH, NAME))
 
 print("Max Accuracy %:", max(accuracy_list) * 100)
 print("Length of misclassified samples", len(test_images))
@@ -194,4 +194,4 @@ def show_data():
 
 show_stats()
 #show_data()
-show_misclassified_samples()
+#show_misclassified_samples()
